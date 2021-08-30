@@ -1,0 +1,181 @@
+#!/usr/bin/ruby
+
+require "net/http"
+require "optparse"
+require "json"
+
+API_BASE_URL="https://api.github.com"
+
+if __FILE__ == $0
+  @access_token = ENV["PAT"]
+  if @access_token.nil?
+    puts "Set a PAT environment variable"
+    exit 1
+  end
+
+  def read_cache
+    Marshal.load(File.read(File.join(File.dirname(__FILE__), "doric.cache")))
+  rescue Errno::ENOENT
+    {}
+  end
+
+  @cache = read_cache
+
+  @options = {}
+  OptionParser.new do |opts|
+    opts.banner = "Usage: example.rb [options]"
+
+    opts.on("-v", "--verbose", "Verbose output") do |v|
+      @options[:verbose] = v
+    end
+    opts.on("-oORG", "--organization=ORG", "GitHub Organiztaion") do |o|
+      @options[:org] = o
+    end
+    opts.on("-pPROJECT", "--project=PROJECT", "Project name") do |p|
+      @options[:project] = p
+    end
+    opts.on("-cCOLUMN", "--column=COLUMN", "Project column") do |c|
+      @options[:column] = c
+    end
+  end.parse!
+
+  if @options[:org].nil? || @options[:project].nil? || @options[:column].nil?
+    puts "Please supply --organization, --project and --column"
+    exit 1
+  end
+
+  def debug(message)
+    puts "#{Time.now}: #{message}" if @options[:verbose]
+  end
+
+  def find_project(url)
+    if cached_project = @cache["#{@options[:org]}:#{@options[:project]}"]
+      debug "Found cached project..."
+      return cached_project
+    end
+
+    uri = URI(url)
+    debug "Looking for project at: '#{uri}'"
+    Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+      request = Net::HTTP::Get.new(uri)
+      request["Authorization"] = "bearer #{@access_token}"
+      request["Accept"] = "application/vnd.github.inertia-preview+json"
+
+      response = http.request request
+
+      projects = JSON.parse(response.body)
+
+      if wanted_project = projects.find { |p| p['name'] == @options[:project] }
+        debug "Found project: #{wanted_project['name']}: #{wanted_project['id']}"
+        @cache["#{@options[:org]}:#{@options[:project]}"] = wanted_project
+        return wanted_project
+      else
+        if next_url = extract_next_page(response["Link"])
+          debug "More to do..."
+          find_project(next_url)
+        else
+          debug "Exhausted all options. Couldn't find project"
+          return nil
+        end
+      end
+    end
+  end
+
+  def find_column(url)
+    uri = URI(url)
+    Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+      request = Net::HTTP::Get.new(uri)
+      request["Authorization"] = "bearer #{@access_token}"
+      request["Accept"] = "application/vnd.github.inertia-preview+json"
+
+      response = http.request request
+
+      columns = JSON.parse(response.body)
+      columns.each { |c| debug "Column: #{c["name"]}" }
+      if wanted_column = columns.find { |c| c["name"] == @options[:column] }
+        return wanted_column
+      else
+        debug "Couldn't find column matching #{@options[:column]}"
+      end
+    end
+  end
+
+  def extract_next_page(link_header)
+    return if link_header.nil?
+    raw_pieces = link_header.split(",")
+    pieces = raw_pieces.inject({}) do |final, piece|
+      url, rel = piece.split(";")
+      url = url.gsub("<", "")&.gsub(">", "").strip
+      rel = rel.gsub("rel=", "")&.gsub('"', "").strip
+      debug url
+      debug rel
+
+      final[rel] = url
+      final
+    end
+    pieces["next"]
+  end
+
+  def get_resources(url, all_cards = [])
+    uri = URI(url)
+    Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+      request = Net::HTTP::Get.new(uri)
+      request["Authorization"] = "bearer #{@access_token}"
+      request["Accept"] = "application/vnd.github.inertia-preview+json"
+
+      response = http.request request
+
+      all_cards.concat(JSON.parse(response.body))
+
+      if next_page = extract_next_page(response["Link"])
+        get_resources(next_page, all_cards)
+      else
+        return all_cards
+      end
+    end
+  end
+
+  def get_resource(url)
+    uri = URI(url)
+    Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+      request = Net::HTTP::Get.new(uri)
+      request["Authorization"] = "bearer #{@access_token}"
+      request["Accept"] = "application/vnd.github.inertia-preview+json"
+
+      response = http.request request
+
+      JSON.parse(response.body)
+    end
+  end
+
+  def write_cache!
+    File.open(File.join(File.dirname(__FILE__), "doric.cache"), "w+") do |f|
+      f.puts(Marshal.dump(@cache))
+    end
+  end
+
+  start_url = "#{API_BASE_URL}/orgs/#{@options[:org]}/projects"
+  if wanted_project = find_project(start_url)
+    start_url = "#{API_BASE_URL}/projects/#{wanted_project["id"]}/columns"
+    if wanted_column = find_column(start_url)
+      cards_url = "#{API_BASE_URL}/projects/columns/#{wanted_column["id"]}/cards"
+      cards = get_resources(cards_url)
+      cards.each do |card|
+        debug "Card: #{card["url"]}"
+        debug "Card content_url: #{card["content_url"]}"
+        content = get_resource(card["url"])
+        if content["content_url"]
+          # get actual content
+          linked_content = get_resource(content["content_url"])
+          puts "#{linked_content["html_url"]}: #{linked_content["title"]}"
+        end
+      end
+    else
+      debug "Couldn't find column matching #{@options[:column]}"
+    end
+  else
+    debug "No project found matching #{@options[:project]}"
+  end
+
+  write_cache!
+end
