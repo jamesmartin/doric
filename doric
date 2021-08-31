@@ -79,21 +79,15 @@ def extract_next_page(link_header)
 end
 
 def get_resources(url, all_cards = [])
-  uri = URI(url)
-  Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
-    request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "bearer #{@access_token}"
-    request["Accept"] = "application/vnd.github.inertia-preview+json"
+  response, resource = get_resource(url)
+  all_cards.concat(resource)
 
-    response = http.request request
-
-    all_cards.concat(JSON.parse(response.body))
-
-    if next_page = extract_next_page(response["Link"])
-      get_resources(next_page, all_cards)
-    else
-      return all_cards
-    end
+  if next_page = extract_next_page(response["Link"])
+    # TODO: test that this actually works on a column with multiple pages
+    debug("get_resources. Moving to next page: #{next_page}")
+    get_resources(next_page, all_cards)
+  else
+    return all_cards
   end
 end
 
@@ -106,11 +100,9 @@ def get_resource(url)
 
     response = http.request request
 
-    JSON.parse(response.body)
+    [response, JSON.parse(response.body)]
   end
 end
-
-@cache = read_cache
 
 def read_cache
   Marshal.load(File.read(File.join(File.dirname(__FILE__), "doric.cache")))
@@ -123,6 +115,8 @@ def write_cache!
     f.puts(Marshal.dump(@cache))
   end
 end
+
+@cache = read_cache
 
 if __FILE__ == $0
   @access_token = ENV["PAT"]
@@ -163,10 +157,10 @@ if __FILE__ == $0
       cards.each do |card|
         debug "Card: #{card["url"]}"
         debug "Card content_url: #{card["content_url"]}"
-        content = get_resource(card["url"])
+        _, content = get_resource(card["url"])
         if content["content_url"]
           # get actual content
-          linked_content = get_resource(content["content_url"])
+          _, linked_content = get_resource(content["content_url"])
           puts "#{linked_content["html_url"]}: #{linked_content["title"]}"
         end
       end
