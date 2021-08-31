@@ -44,21 +44,12 @@ def find_project(url)
 end
 
 def find_column(url)
-  uri = URI(url)
-  Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
-    request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "bearer #{@access_token}"
-    request["Accept"] = "application/vnd.github.inertia-preview+json"
-
-    response = http.request request
-
-    columns = JSON.parse(response.body)
-    columns.each { |c| debug "Column: #{c["name"]}" }
-    if wanted_column = columns.find { |c| c["name"] == @options[:column] }
-      return wanted_column
-    else
-      debug "Couldn't find column matching #{@options[:column]}"
-    end
+  _, columns = get_resource(url)
+  columns.each { |c| debug "Column: #{c["name"]}" }
+  if wanted_column = columns.find { |c| c["name"] == @options[:column] }
+    return wanted_column
+  else
+    debug "Couldn't find column matching #{@options[:column]}"
   end
 end
 
