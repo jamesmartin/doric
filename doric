@@ -52,13 +52,18 @@ def find_project(url)
 end
 
 def find_column(url)
-  _, columns = get_resource(url)
-  columns.each { |c| debug "Column: #{c["name"]}" }
-  if wanted_column = columns.find { |c| c["name"] == @options[:column] }
-    return wanted_column
-  else
+  column = find_resource(
+    url,
+    -> (columns) {
+      columns.find { |column| column["name"] == @options[:column] }
+    }
+  )
+
+  if column.nil?
     debug "Couldn't find column matching #{@options[:column]}"
   end
+
+  column
 end
 
 def extract_next_page(link_header)
