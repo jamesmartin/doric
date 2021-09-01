@@ -60,16 +60,16 @@ def extract_next_page(link_header)
   pieces["next"]
 end
 
-def get_resources(url, all_cards = [])
+def get_resources(url, all_resources = [])
   response, resource = get_resource(url)
-  all_cards.concat(resource)
+  all_resources.concat(resource)
 
   if next_page = extract_next_page(response["Link"])
     # TODO: test that this actually works on a column with multiple pages
     debug("get_resources. Moving to next page: #{next_page}")
-    get_resources(next_page, all_cards)
+    get_resources(next_page, all_resources)
   else
-    return all_cards
+    return all_resources
   end
 end
 
