@@ -133,18 +133,10 @@ if __FILE__ == $0
   OptionParser.new do |opts|
     opts.banner = "Usage: example.rb [options]"
 
-    opts.on("-v", "--verbose", "Verbose output") do |v|
-      @options[:verbose] = v
-    end
-    opts.on("-oORG", "--organization=ORG", "GitHub Organiztaion") do |o|
-      @options[:org] = o
-    end
-    opts.on("-pPROJECT", "--project=PROJECT", "Project name") do |p|
-      @options[:project] = p
-    end
-    opts.on("-cCOLUMN", "--column=COLUMN", "Project column") do |c|
-      @options[:column] = c
-    end
+    opts.on("-v", "--verbose", "Verbose output") { |v| @options[:verbose] = v }
+    opts.on("-oORG", "--organization=ORG", "GitHub Organiztaion") { |o| @options[:org] = o }
+    opts.on("-pPROJECT", "--project=PROJECT", "Project name") { |p| @options[:project] = p }
+    opts.on("-cCOLUMN", "--column=COLUMN", "Project column") { |c| @options[:column] = c }
   end.parse!
 
   if @options[:org].nil? || @options[:project].nil? || @options[:column].nil?
