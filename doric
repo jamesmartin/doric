@@ -16,29 +16,20 @@ def find_project(url)
     return cached_project
   end
 
-  uri = URI(url)
-  debug "Looking for project at: '#{uri}'"
-  Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
-    request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "bearer #{@access_token}"
-    request["Accept"] = "application/vnd.github.inertia-preview+json"
+  debug "Looking for project at: '#{url}'"
+  response, projects = get_resource(url)
 
-    response = http.request request
-
-    projects = JSON.parse(response.body)
-
-    if wanted_project = projects.find { |p| p['name'] == @options[:project] }
-      debug "Found project: #{wanted_project['name']}: #{wanted_project['id']}"
-      @cache["#{@options[:org]}:#{@options[:project]}"] = wanted_project
-      return wanted_project
+  if wanted_project = projects.find { |p| p['name'] == @options[:project] }
+    debug "Found project: #{wanted_project['name']}: #{wanted_project['id']}"
+    @cache["#{@options[:org]}:#{@options[:project]}"] = wanted_project
+    return wanted_project
+  else
+    if next_url = extract_next_page(response["Link"])
+      debug "More to do..."
+      find_project(next_url)
     else
-      if next_url = extract_next_page(response["Link"])
-        debug "More to do..."
-        find_project(next_url)
-      else
-        debug "Exhausted all options. Couldn't find project"
-        return nil
-      end
+      debug "Exhausted all options. Couldn't find project"
+      return nil
     end
   end
 end
