@@ -87,7 +87,7 @@ def get_resources(url, all_resources = [])
   all_resources.concat(resource)
 
   if next_page = extract_next_page(response["Link"])
-    # TODO: test that this actually works on a column with multiple pages
+    # TODO: test that this actually works on a resource with multiple pages
     debug("get_resources. Moving to next page: #{next_page}")
     get_resources(next_page, all_resources)
   else
