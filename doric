@@ -10,6 +10,24 @@ def debug(message)
   puts "#{Time.now}: #{message}" if @options[:verbose]
 end
 
+def find_resource(url, finder = ->(*) { false })
+  debug "Looking for resource at: '#{url}'"
+  response, resource = get_resource(url)
+
+  if wanted_resource = finder.call(resource)
+    debug "Found resource: #{resource}"
+    return wanted_resource
+  else
+    if next_url = extract_next_page(response["Link"])
+      debug "More to do..."
+      find_resource(next_url, finder)
+    else
+      debug "Exhausted all options. Couldn't find resource"
+      return nil
+    end
+  end
+end
+
 def find_project(url)
   if cached_project = @cache["#{@options[:org]}:#{@options[:project]}"]
     debug "Found cached project..."
@@ -17,21 +35,20 @@ def find_project(url)
   end
 
   debug "Looking for project at: '#{url}'"
-  response, projects = get_resource(url)
+  project = find_resource(
+    url,
+    -> (projects) {
+      projects.find { |project| project["name"] == @options[:project] }
+    }
+  )
 
-  if wanted_project = projects.find { |p| p['name'] == @options[:project] }
-    debug "Found project: #{wanted_project['name']}: #{wanted_project['id']}"
-    @cache["#{@options[:org]}:#{@options[:project]}"] = wanted_project
-    return wanted_project
+  if project.nil?
+    debug "Couldn't find project"
   else
-    if next_url = extract_next_page(response["Link"])
-      debug "More to do..."
-      find_project(next_url)
-    else
-      debug "Exhausted all options. Couldn't find project"
-      return nil
-    end
+    @cache["#{@options[:org]}:#{@options[:project]}"] = project
   end
+
+  project
 end
 
 def find_column(url)
