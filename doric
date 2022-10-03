@@ -103,6 +103,11 @@ def get_resource(url)
     request["Accept"] = "application/vnd.github.inertia-preview+json"
 
     response = http.request request
+    debug("get_response: Status #{response.code}")
+    if response.is_a?(Net::HTTPClientError)
+      puts "Client error fetching #{url}: Status #{response.code}, #{response.body}"
+      exit 1
+    end
 
     [response, JSON.parse(response.body)]
   end
