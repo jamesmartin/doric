@@ -167,9 +167,11 @@ if __FILE__ == $0
       end
     else
       debug "Couldn't find column matching #{@options[:column]}"
+      exit 1
     end
   else
     debug "No project found matching #{@options[:project]}"
+    exit 1
   end
 
   write_cache!
